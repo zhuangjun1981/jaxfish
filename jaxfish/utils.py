@@ -1,41 +1,17 @@
-import h5py
 import numpy as np
-import numbers
-from typing import Union
+from jaxfish.data_classes import Terrain
+import jax.numpy as jnp
 
 
-def save_h5_dataset(
-    h5_group: h5py.Group,
-    key: str,
-    value: Union[int, float, list, tuple, np.ndarray],
-):
-    if isinstance(value, Union[list, tuple]):
-        value = np.array(value)
-
-    if key == "food_pos_history":
-        dset = h5_group.create_dataset(
-            key, data=value, dtype=np.uint8, compression="lzf"
-        )
-    elif key == "terrain_map":
-        dset = h5_group.create_dataset(key, data=value, dtype=np.uint8)
-    elif key == "position_history":
-        dset = h5_group.create_dataset(
-            key, data=value, dtype=np.uint16, compression="lzf"
-        )
-    elif key == "rf_positions":
-        dset = h5_group.create_dataset(key, data=value, dtype=np.int32)
-    elif key == "step_motion":
-        dset = h5_group.create_dataset(key, data=value, dtype=np.int16)
-    elif isinstance(value, numbers.Integral):
-        dset = h5_group.create_dataset(key, data=value, dtype=np.int32)
-    elif isinstance(value, float):
-        dset = h5_group.create_dataset(key, data=value, dtype=np.float32)
-    elif isinstance(value, np.ndarray):
-        if np.issubdtype(value.dtype, np.integer):
-            dset = h5_group.create_dataset(key, data=value, dtype=np.uint16)
-        elif np.issubdtype(value.dtype, np.floating):
-            dset = h5_group.create_dataset(key, data=value, dtype=np.float32)
+def generate_terrain_map(terrain: Terrain):
+    if terrain.should_use_minimap:
+        terrain_map = np.zeros(terrain.minimap_size, dtype=np.uint8)
+        margin = terrain.minimap_margin
+        terrain_map[:margin, :] = 1
+        terrain_map[-margin:, :] = 1
+        terrain_map[:, :margin] = 1
+        terrain_map[:, -margin:] = 1
     else:
-        dset = h5_group.create_dataset(key, data=value)
+        raise NotImplementedError("regular map other than minimap not implemented")
 
-    return dset
+    return jnp.array(terrain_map)
