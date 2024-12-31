@@ -1,6 +1,1 @@
-__version__ = "0.0.0"
-__license__ = "MIT"
-__author__ = "Jun Zhuang"
-__author_email__ = "wood_stocker@hotmail.com"
-__url__ = "https://github.com/zhuangjun1981/jaxfish/"
-__downloadUrl__ = "https://github.com/zhuangjun1981/jaxfish/"
+
