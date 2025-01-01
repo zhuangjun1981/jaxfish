@@ -3,6 +3,7 @@ import numpy as np
 import jax.numpy as jnp
 import scipy.ndimage as ni
 from jaxfish.data_classes import Terrain, Connection
+from functools import partial
 
 
 def generate_terrain_map(terrain: Terrain) -> jnp.ndarray:
@@ -51,9 +52,8 @@ def update_food_positions(
     terrain_map: jnp.ndarray,
     fish_position: jnp.ndarray,
     food_positions: jnp.ndarray,
-    eaten_food_positions: jnp.ndarray,
     rng: jax.Array,
-) -> jnp.ndarray:
+) -> tuple[jnp.ndarray, int]:
     """
     update food positions, given the state of simulation.
     if no food is eaten keep the same food positions.
@@ -80,43 +80,39 @@ def update_food_positions(
     Returns:
         food_positions: jnp.ndarray, shape = (food_num, 2), updated food
           positions.
+        eaten_food_num: int, number of food eaten
     """
-    if len(eaten_food_positions) == 0:
-        return food_positions
-    else:
-        mask = jnp.any(
-            jnp.all(food_positions[:, None] == eaten_food_positions[None, :], axis=-1),
-            axis=-1,
-        )
-        new_food_num = jnp.sum(mask)
 
-        position_map = jnp.array(terrain_map)
-        position_map = position_map.at[
-            fish_position[0] - 1 : fish_position[0] + 2,
-            fish_position[1] - 1 : fish_position[1] + 2,
-        ].set(1)
+    fish_pixels = set(
+        [
+            (row, col)
+            for row in range(fish_position[0] - 1, fish_position[0] + 2)
+            for col in range(fish_position[1] - 1, fish_position[1] + 2)
+        ]
+    )
+    food_pixels = set([tuple(p) for p in food_positions.tolist()])
+    eaten_food_pixels = fish_pixels.intersection(food_pixels)
+    eaten_food_num = len(eaten_food_pixels)
 
-        left_food_positions = food_positions[~mask]
+    print(food_pixels)
 
-        if len(left_food_positions) > 0:
-            position_map = position_map.at[
-                left_food_positions.T[0],
-                left_food_positions.T[1],
-            ].set(1)
+    if eaten_food_num == 0:
+        return food_positions, 0
 
-        available_food_positions = jnp.array(jnp.where(position_map == 0)).T
+    left_food_pixels = food_pixels - eaten_food_pixels
+    available_food_pixels = jnp.array(jnp.where(terrain_map == 0)).T
+    available_food_pixels = set([tuple(p) for p in available_food_pixels.tolist()])
+    available_food_pixels = available_food_pixels - fish_pixels - left_food_pixels
 
-        new_food_positions = jax.random.choice(
-            rng,
-            available_food_positions,
-            (new_food_num,),
-        )
+    new_food_pixels = jax.random.choice(
+        rng, jnp.array(list(available_food_pixels)), (eaten_food_num,)
+    )
+    new_food_pixels = set([tuple(p) for p in new_food_pixels.tolist()])
 
-        indices = jnp.where(mask)[0]
-        for i, idx in enumerate(indices):
-            food_positions = food_positions.at[idx].set(new_food_positions[i])
+    food_pixels = left_food_pixels.union(new_food_pixels)
+    food_positions = jnp.array(list(food_pixels))
 
-        return food_positions
+    return food_positions, eaten_food_num
 
 
 def generate_psp_waveform(connection: Connection) -> jnp.ndarray:
@@ -148,13 +144,15 @@ if __name__ == "__main__":
     terrain = Terrain(minimap_size=(7, 7))
     minimap = generate_terrain_map(terrain)
     fish_position = get_starting_fish_position(minimap, rng=key)
+    food_positions = jnp.array([[1, 1], [1, 5], [3, 1]])
 
-    updated_food_positions = update_food_positions(
+    updated_food_positions, eaten_food_num = update_food_positions(
         terrain_map=minimap,
         fish_position=fish_position,
-        food_positions=jnp.array([[1, 1], [2, 1], [3, 1]]),
-        eaten_food_positions=jnp.array([[1, 1]]),
+        food_positions=food_positions,
         rng=food_key,
     )
 
-    print(updated_food_positions)
+    print(f"{food_positions=}")
+    print(f"{updated_food_positions=}")
+    print(f"{eaten_food_num=}")

@@ -38,6 +38,7 @@ def initiate_simulation(
 
     Return:
         firing_keys: jnp.ndarray, shape=(n_neurons, length), dtype=uint32 ("key<fry>")
+        food_keys: jnp.ndarray, shape=(length,), dtype=uint32 ("key<fry>")
         terrain_map: jnp.ndarray, shape=(n_rows, n_cols), dtype=uint8
         food_positions_history,: jnp.ndarray, shape=(length, food_num, 2), dtype=int32
         fish_position_history, jnp.ndarray, shape=(length, 2), dtype=int32
@@ -103,6 +104,7 @@ def initiate_simulation(
 
     return (
         firing_keys,
+        food_keys,
         terrain_map,
         food_positions_history,
         fish_position_history,
@@ -113,7 +115,57 @@ def initiate_simulation(
     )
 
 
-def step_simulation():
+def step_simulation(
+    t: int,
+    fish: FishForzen,
+    brain: BrainFrozen,
+    simulation: SimulationFrozen,
+    firing_keys: jnp.ndarray,
+    food_keys: jnp.ndarray,
+    terrain_map: jnp.ndarray,
+    food_positions_history: jnp.ndarray,
+    fish_position_history: jnp.ndarray,
+    health_history: jnp.ndarray,
+    firing_history: jnp.ndarray,
+    psp_waveforms: tuple[jnp.ndarray],
+    psp_history: tuple[jnp.ndarray],
+):
+    """
+    given the current terrain map, fish position, food positions,
+    evaluate events in following steps:
+      1. if fish's body overlaps with food, eat food
+      2. if there is food eaten, spaw new food, otherwise keep old food, set food positions in next time point
+      3. get input to the brain with terrain map and food position in next time point
+      4. update neuron firing, psp history, and fish movement (jit compile this step?)
+      5. move fish and set fish position in next time point
+    """
+
+    curr_health = health_history[t]
+    if curr_health < 0.0:
+        return
+
+    curr_fish_position = fish_position_history[t]
+    curr_food_positions = food_positions_history[t]
+
+    # update food positions and find out number of food eaten
+    updated_food_positions, eaten_food_num = ut.update_food_positions(
+        terrain_map=terrain_map,
+        fish_position=curr_fish_position,
+        food_positions=curr_food_positions,
+        rng=food_keys[t],
+    )
+
+    # set food positions at t + 1
+    food_positions_history = food_positions_history.at[t + 1].set(
+        updated_food_positions
+    )
+
+    # updata health
+    curr_health = curr_health + eaten_food_num * fish.food_rate
+
+    # set health at t + 1
+    curr_health = curr_health - fish.health_decay_rate
+    health_history = health_history.at[t + 1].set(curr_health)
     pass
 
 
