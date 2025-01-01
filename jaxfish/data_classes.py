@@ -153,6 +153,7 @@ class SimulationFrozen:
     simulation_ind: int
     max_simulation_length: int = 20000
     food_num: int = 1
+    main_seed: int = 42
 
 
 EIGHT_EYES = {
