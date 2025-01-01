@@ -2,7 +2,7 @@ import jax
 import numpy as np
 import jax.numpy as jnp
 import scipy.ndimage as ni
-from jaxfish.data_classes import Terrain
+from jaxfish.data_classes import Terrain, Connection
 
 
 def generate_terrain_map(terrain: Terrain) -> jnp.ndarray:
@@ -117,6 +117,27 @@ def update_food_positions(
             food_positions = food_positions.at[idx].set(new_food_positions[i])
 
         return food_positions
+
+
+def generate_psp_waveform(connection: Connection) -> jnp.ndarray:
+    """
+    generate unit post synaptic probability wave form for a given connection
+    """
+
+    psp = np.zeros(connection.latency + connection.rise_time + connection.decay_time)
+    psp[connection.latency : connection.latency + connection.rise_time] = (
+        connection.amplitude
+        * (np.arange(connection.rise_time) + 1).astype(np.float32)
+        / float(connection.rise_time)
+    )
+
+    psp[-connection.decay_time :] = (
+        connection.amplitude
+        * (np.arange(connection.decay_time, 0, -1) - 1).astype(np.float32)
+        / float(connection.decay_time)
+    )
+
+    return jnp.array(psp, dtype=jnp.float32)
 
 
 if __name__ == "__main__":

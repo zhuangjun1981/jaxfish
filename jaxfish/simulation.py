@@ -17,7 +17,36 @@ def initiate_simulation(
     fish: FishForzen,
     brain: BrainFrozen,
 ) -> tuple[jnp.ndarray, tuple[jnp.ndarray]]:
-    """ """
+    """
+    Initiate one simulation of one fish,
+      1. generate terrain map
+      2. generate random number generaters,
+      3. allocate memory for various simulation cache
+        - psp_waveforms for each connection
+        - food_positions_history
+        - fish_position_history
+        - firing_history for each neuron
+        - health_history
+        - psp_hisory for each neuron
+      4. initiate fish and food positions
+
+    Args:
+      terrain: Terrain dataclass
+      simulation: SimulationFrozen dataclass
+      fish: FishFrozen dataclass
+      brain: BrainFrozen dataclass
+
+    Return:
+        firing_keys: jnp.ndarray, shape=(n_neurons, length), dtype=uint32 ("key<fry>")
+        terrain_map: jnp.ndarray, shape=(n_rows, n_cols), dtype=uint8
+        food_positions_history,: jnp.ndarray, shape=(length, food_num, 2), dtype=int32
+        fish_position_history, jnp.ndarray, shape=(length, 2), dtype=int32
+        health_history: jnp.ndarray, shape=(length,), dtype=float32
+        firing_history: jnp.ndarray, shape=(n_neurons, length), dtype=uint8
+        psp_waveforms: tuple[jnp.ndarray], len=n_connections, each element is 1d, with dtyp float32
+        psp_history: jnp.ndarray, shape=(n_neurons, length), dtype=float32
+    """
+
     length = simulation.max_simulation_length
     n_neurons = len(brain.neurons)
 
@@ -63,13 +92,17 @@ def initiate_simulation(
     firing_history = jnp.zeros((n_neurons, length), dtype=jnp.uint8)
 
     # generate psp waveforms
-    psp_waveforms = ()
+    psp_waveforms = []
+    for connection in brain.connections:
+        psp_waveforms.append(ut.generate_psp_waveform(connection))
+    psp_waveforms = tuple(psp_waveforms)
 
     # initiate neuron post-synaptic potential waveforms
     baselines = jnp.expand_dims(jnp.array([n.baseline_rate for n in brain.neurons]), 1)
     psp_history = jnp.ones((len(brain.neurons), length), dtype=float) * baselines
 
     return (
+        firing_keys,
         terrain_map,
         food_positions_history,
         fish_position_history,
@@ -100,6 +133,7 @@ if __name__ == "__main__":
     )
 
     (
+        firing_keys,
         terrain_map,
         food_positions_history,
         fish_position_history,
@@ -109,6 +143,8 @@ if __name__ == "__main__":
         psp_history,
     ) = _
 
+    # print(firing_keys)
+    print(firing_keys[0].dtype)
     # print(terrain_map)
     # print(psp_history)
-    print(fish_position_history)
+    # print(fish_position_history)
