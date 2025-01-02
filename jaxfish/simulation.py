@@ -62,7 +62,7 @@ def initiate_simulation(
     firing_keys = jax.random.split(firing_key, (n_neurons, length))
 
     # generate terrain map
-    terrain_map = jnp.array(ut.generate_terrain_map(terrain))
+    terrain_map = ut.generate_terrain_map(terrain)
 
     # initiate fish position history
     fish_position_history = jnp.zeros((length, 2), dtype=jnp.int32)
@@ -102,7 +102,7 @@ def initiate_simulation(
         psp_waveforms.append(ut.generate_psp_waveform(connection))
     psp_waveforms = tuple(psp_waveforms)
 
-    # initiate neuron post-synaptic potential waveforms
+    # initiate neuron post-synaptic potential waveforms, this part is jit compatable, if brain ahd simulation is set to be static
     baselines = jnp.expand_dims(jnp.array([n.baseline_rate for n in brain.neurons]), 1)
     psp_history = jnp.ones((len(brain.neurons), length), dtype=float) * baselines
 
