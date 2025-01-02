@@ -1,7 +1,6 @@
 import jax
 import numpy as np
 import jax.numpy as jnp
-import scipy.ndimage as ni
 from jaxfish.data_classes import Terrain, ConnectionFrozen
 from functools import partial
 
