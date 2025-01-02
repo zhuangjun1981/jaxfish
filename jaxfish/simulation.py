@@ -96,7 +96,8 @@ def initiate_simulation(
     # initiate neuron firing history
     firing_history = jnp.zeros((n_neurons, length), dtype=jnp.uint8)
 
-    # generate psp waveforms
+    # generate psp waveforms,
+    # TODO: make this a jnp.array
     psp_waveforms = []
     for connection in brain.connections:
         psp_waveforms.append(ut.generate_psp_waveform(connection))
@@ -152,11 +153,11 @@ def step_simulation(
     curr_food_positions = food_positions_history[t]
 
     # update food positions and find out number of food eaten
-    updated_food_positions, eaten_food_num = ut.update_food_positions(
+    updated_food_positions, eaten_food_num = ut.update_food_positions_in_simulation(
         terrain_map=terrain_map,
         fish_position=curr_fish_position,
         food_positions=curr_food_positions,
-        rng=food_keys[t],
+        key=food_keys[t],
     )
 
     # set food positions at t + 1
