@@ -9,8 +9,10 @@ from jaxfish.data_classes import (
     frozen,
 )
 import jaxfish.utils as ut
+from functools import partial
 
 
+@partial(jax.jit, static_argnames=["terrain", "simulation", "fish", "brain"])
 def initiate_simulation(
     terrain: Terrain,
     simulation: SimulationFrozen,
