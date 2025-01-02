@@ -49,6 +49,7 @@ def initiate_simulation(
     """
 
     length = simulation.max_simulation_length
+    food_num = simulation.food_num
     n_neurons = len(brain.neurons)
 
     # generate rngs
@@ -65,9 +66,8 @@ def initiate_simulation(
     fish_position_history = jnp.zeros((length, 2), dtype=jnp.int32)
 
     # update initial fish position
-    fish_position_history = fish_position_history.at[0].set(
-        ut.get_starting_fish_position(terrain_map, fish_key)
-    )
+    starting_fish_position = ut.get_starting_fish_position(terrain_map, fish_key)
+    fish_position_history = fish_position_history.at[0].set(starting_fish_position)
 
     # initiate food position history
     food_positions_history = jnp.zeros(
@@ -75,13 +75,15 @@ def initiate_simulation(
     )
 
     # update initial food positions
+    food_map = jnp.array(terrain_map)
+    fish_pixels = ut.get_fish_pixels(starting_fish_position)
+    food_map = food_map.at[fish_pixels.T[0], fish_pixels.T[1]].set(1)
     food_positions_history = food_positions_history.at[0].set(
         ut.update_food_positions(
-            terrain_map=terrain_map,
-            fish_position=fish_position_history[0],
+            food_map=food_map,
             food_positions=food_positions_history[0],
-            eaten_food_positions=food_positions_history[0],
-            rng=food_keys[0],
+            is_eaten=jnp.ones(food_num),
+            key=food_keys[0],
         )
     )
 
@@ -163,6 +165,14 @@ def step_simulation(
     # updata health
     curr_health = curr_health + eaten_food_num * fish.food_rate
 
+    # get input to the eye
+
+    # update firing of all neurons, get movement
+
+    # update psp histories
+
+    # set fish_position at t + 1
+
     # set health at t + 1
     curr_health = curr_health - fish.health_decay_rate
     health_history = health_history.at[t + 1].set(curr_health)
@@ -186,6 +196,7 @@ if __name__ == "__main__":
 
     (
         firing_keys,
+        food_keys,
         terrain_map,
         food_positions_history,
         fish_position_history,
