@@ -5,11 +5,12 @@ it will need the following data:
 
  - terrain related, static
    - terrain_map: ndarray, (9, 9)
-   - margin: int
 
  - simulation related, static
    - max_simulation_length: int
    - food_num: int, static, use 1 or 2
+   - simulation_ind: int
+   - main_seed: int
  
  - fish related, static
    - max_health: float, static  
@@ -39,7 +40,8 @@ it will need the following data:
 
 functions:
 
- - generate_terrain_minimap(shape:List[int]=[9, 9], food_num:int=1) -> ndarray:
+ - initiate_simulation()
 
- - create_simulation_cache(neurons, connections, )
+ - step_simulation()
 
+ - save_simulation()
