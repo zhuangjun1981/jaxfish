@@ -2,7 +2,7 @@ import jax
 import numpy as np
 import jax.numpy as jnp
 import scipy.ndimage as ni
-from jaxfish.data_classes import Terrain, Connection
+from jaxfish.data_classes import Terrain, ConnectionFrozen
 from functools import partial
 
 
@@ -94,7 +94,8 @@ def generate_terrain_map(terrain: Terrain) -> jnp.ndarray:
     return terrain_map
 
 
-def get_starting_fish_position(terrain_map: np.ndarray, rng: jax.Array):
+@jax.jit
+def get_starting_fish_position(terrain_map: np.ndarray, key: jax.Array):
     """
     Return an (row, col) array that can be a starting position of the fish.
     the starting position is the center of the 3 x 3 fish body and ensures
@@ -102,15 +103,41 @@ def get_starting_fish_position(terrain_map: np.ndarray, rng: jax.Array):
     value of 1)
     """
 
-    position_map = ni.binary_dilation(
-        terrain_map,
-        structure=[[1, 1, 1], [1, 1, 1], [1, 1, 1]],
-        border_value=1,
+    # Get array shape
+    height, width = terrain_map.shape
+
+    # Create array of all positions
+    rows = jnp.arange(1, height - 1)[:, None]
+    cols = jnp.arange(1, width - 1)[None, :]
+    all_rows = jnp.broadcast_to(rows, (height - 2, width - 2)).ravel()
+    all_cols = jnp.broadcast_to(cols, (height - 2, width - 2)).ravel()
+    all_positions = jnp.stack([all_rows, all_cols], axis=1)
+
+    all_positions = all_positions[jax.random.permutation(key, all_positions.shape[0])]
+
+    jax.debug.print("{all_positions}", all_positions=all_positions)
+
+    init_val = 0
+
+    def cond_fun(i):
+        fish_position = all_positions[i]
+        fish_pixels = get_fish_pixels(fish_position)
+
+        def is_zero(fish_pixel):
+            return terrain_map[*fish_pixel] == 0
+
+        is_zero_arr = jax.vmap(is_zero)(fish_pixels)
+
+        return ~is_zero_arr.all()
+
+    body_fun = lambda i: i + 1
+    fish_pos_idx = jax.lax.while_loop(
+        cond_fun=cond_fun,
+        body_fun=body_fun,
+        init_val=init_val,
     )
-
-    locations = np.array(np.where(position_map == 0)).T
-
-    return jax.random.choice(key=rng, a=locations)
+    fish_position = all_positions[fish_pos_idx]
+    return fish_position
 
 
 @jax.jit
@@ -197,7 +224,8 @@ def update_food_positions_in_simulation(
     return food_positions, eaten_food_num
 
 
-def generate_psp_waveform(connection: Connection) -> jnp.ndarray:
+@partial(jax.jit, static_argnames="connection")
+def generate_psp_waveform(connection: ConnectionFrozen) -> jnp.ndarray:
     """
     generate unit post synaptic probability wave form for a given connection
     """
@@ -223,10 +251,10 @@ if __name__ == "__main__":
     key = jax.random.key(seed)
     fish_key, food_key = jax.random.split(key, 2)
 
-    terrain = Terrain(minimap_size=(7, 7))
+    terrain = Terrain(minimap_size=(6, 6))
     minimap = generate_terrain_map(terrain)
-    fish_position = get_starting_fish_position(minimap, rng=key)
-    food_positions = jnp.array([[1, 1], [1, 5], [3, 1]])
+    fish_position = get_starting_fish_position(minimap, key=key)
+    food_positions = jnp.array([[1, 1], [1, 4], [3, 1]])
 
     updated_food_positions, eaten_food_num = update_food_positions_in_simulation(
         terrain_map=minimap,
@@ -235,6 +263,20 @@ if __name__ == "__main__":
         key=food_key,
     )
 
+    print(minimap)
+    print(f"{fish_position=}")
     print(f"{food_positions=}")
     print(f"{updated_food_positions=}")
     print(f"{eaten_food_num=}")
+
+    # # =======================================================
+    # from jaxfish.data_classes import frozen, MINIMUM_BRAIN
+
+    # brain = frozen(MINIMUM_BRAIN)
+    # psp_waveform = generate_psp_waveform(brain.connections[0])
+
+    # print(brain.connections)
+    # print(type(brain.connections))
+    # print(len(brain.connections))
+
+    # psp_waveforms = jax.vmap(generate_psp_waveform, 0, 0)(brain.connections)
