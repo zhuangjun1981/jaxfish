@@ -223,50 +223,61 @@ def update_food_positions_in_simulation(
     return food_positions, eaten_food_num
 
 
-@partial(jax.jit, static_argnames="connection")
-def generate_psp_waveform(connection: ConnectionFrozen) -> jnp.ndarray:
-    """
-    generate unit post synaptic probability wave form for a given connection
-    """
+@partial(jax.jit, static_argnames="psp_waveform_length")
+def generate_psp_waveform(
+    latency: int,
+    rise_time: int,
+    decay_time: int,
+    amplitude: float,
+    psp_waveform_length: int,
+):
+    # assert psp_waveform_length >= (latency + rise_time + decay_time)
 
-    psp = np.zeros(connection.latency + connection.rise_time + connection.decay_time)
-    psp[connection.latency : connection.latency + connection.rise_time] = (
-        connection.amplitude
-        * (np.arange(connection.rise_time) + 1).astype(np.float32)
-        / float(connection.rise_time)
+    psp = jnp.zeros(psp_waveform_length)
+
+    # add rising phase
+    psp = jax.lax.fori_loop(
+        latency,
+        latency + rise_time,
+        lambda i, psp: psp.at[i].set(amplitude * (i - latency + 1) / rise_time),
+        psp,
     )
 
-    psp[-connection.decay_time :] = (
-        connection.amplitude
-        * (np.arange(connection.decay_time, 0, -1) - 1).astype(np.float32)
-        / float(connection.decay_time)
+    # add decay phase
+    psp = jax.lax.fori_loop(
+        latency + rise_time,
+        latency + rise_time + decay_time,
+        lambda i, psp: psp.at[i].set(
+            amplitude - (amplitude / decay_time) * (i - latency - rise_time + 1)
+        ),
+        psp,
     )
 
-    return jnp.array(psp, dtype=jnp.float32)
+    return psp
 
 
 if __name__ == "__main__":
-    seed = 0
-    key = jax.random.key(seed)
-    fish_key, food_key = jax.random.split(key, 2)
+    # seed = 0
+    # key = jax.random.key(seed)
+    # fish_key, food_key = jax.random.split(key, 2)
 
-    terrain = Terrain(minimap_size=(6, 6))
-    minimap = generate_terrain_map(terrain)
-    fish_position = get_starting_fish_position(minimap, key=key)
-    food_positions = jnp.array([[1, 1], [1, 4], [3, 1]])
+    # terrain = Terrain(minimap_size=(6, 6))
+    # minimap = generate_terrain_map(terrain)
+    # fish_position = get_starting_fish_position(minimap, key=key)
+    # food_positions = jnp.array([[1, 1], [1, 4], [3, 1]])
 
-    updated_food_positions, eaten_food_num = update_food_positions_in_simulation(
-        terrain_map=minimap,
-        fish_position=fish_position,
-        food_positions=food_positions,
-        key=food_key,
-    )
+    # updated_food_positions, eaten_food_num = update_food_positions_in_simulation(
+    #     terrain_map=minimap,
+    #     fish_position=fish_position,
+    #     food_positions=food_positions,
+    #     key=food_key,
+    # )
 
-    print(minimap)
-    print(f"{fish_position=}")
-    print(f"{food_positions=}")
-    print(f"{updated_food_positions=}")
-    print(f"{eaten_food_num=}")
+    # print(minimap)
+    # print(f"{fish_position=}")
+    # print(f"{food_positions=}")
+    # print(f"{updated_food_positions=}")
+    # print(f"{eaten_food_num=}")
 
     # # =======================================================
     # from jaxfish.data_classes import frozen, MINIMUM_BRAIN
@@ -279,3 +290,18 @@ if __name__ == "__main__":
     # print(len(brain.connections))
 
     # psp_waveforms = jax.vmap(generate_psp_waveform, 0, 0)(brain.connections)
+
+    # # =======================================================
+    amplitude = 4.0
+    latency = 3
+    rise_time = 2
+    decay_time = 4
+    psp_waveform_length = 10
+    psp_waveform = generate_psp_waveform(
+        latency=latency,
+        rise_time=rise_time,
+        decay_time=decay_time,
+        amplitude=amplitude,
+        psp_waveform_length=psp_waveform_length,
+    )
+    print(psp_waveform)

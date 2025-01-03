@@ -53,6 +53,7 @@ def initiate_simulation(
     length = simulation.max_simulation_length
     food_num = simulation.food_num
     n_neurons = len(brain.neurons)
+    n_connections = len(brain.connections)
 
     # generate rngs
     main_key = jax.random.key(simulation.main_seed)
@@ -98,10 +99,19 @@ def initiate_simulation(
 
     # generate psp waveforms,
     # TODO: make this a jnp.array
-    psp_waveforms = []
-    for connection in brain.connections:
-        psp_waveforms.append(ut.generate_psp_waveform(connection))
-    psp_waveforms = tuple(psp_waveforms)
+    psp_waveforms = jnp.zeros(
+        (n_connections, simulation.psp_waveform_length), dtype=jnp.float32
+    )
+    for c_i, connection in enumerate(brain.connections):
+        psp_waveforms = psp_waveforms.at[c_i].set(
+            ut.generate_psp_waveform(
+                latency=connection.latency,
+                rise_time=connection.rise_time,
+                decay_time=connection.decay_time,
+                amplitude=connection.amplitude,
+                psp_waveform_length=simulation.psp_waveform_length,
+            )
+        )
 
     # initiate neuron post-synaptic potential waveforms, this part is jit compatable, if brain ahd simulation is set to be static
     baselines = jnp.expand_dims(jnp.array([n.baseline_rate for n in brain.neurons]), 1)
@@ -210,7 +220,8 @@ if __name__ == "__main__":
     ) = _
 
     # print(firing_keys)
-    print(firing_keys[0].dtype)
+    # print(firing_keys[0].dtype)
     # print(terrain_map)
     # print(psp_history)
     # print(fish_position_history)
+    print(psp_waveforms)
