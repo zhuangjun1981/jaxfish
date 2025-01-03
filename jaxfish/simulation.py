@@ -6,7 +6,7 @@ from jaxfish.data_classes import (
     BrainFrozen,
     SimulationFrozen,
     MINIMUM_BRAIN,
-    frozen,
+    freeze,
 )
 import jaxfish.utils as ut
 from functools import partial
@@ -18,7 +18,7 @@ def initiate_simulation(
     simulation: SimulationFrozen,
     fish: FishForzen,
     brain: BrainFrozen,
-) -> tuple[jnp.ndarray, tuple[jnp.ndarray]]:
+) -> tuple[jnp.ndarray]:
     """
     Initiate one simulation of one fish,
       1. generate terrain map
@@ -198,7 +198,7 @@ def save_simulation():
 if __name__ == "__main__":
     _ = initiate_simulation(
         terrain=Terrain(),
-        brain=frozen(MINIMUM_BRAIN),
+        brain=freeze(MINIMUM_BRAIN),
         fish=FishForzen(),
         simulation=SimulationFrozen(
             simulation_ind=0,

@@ -280,9 +280,9 @@ if __name__ == "__main__":
     # print(f"{eaten_food_num=}")
 
     # # =======================================================
-    # from jaxfish.data_classes import frozen, MINIMUM_BRAIN
+    # from jaxfish.data_classes import freeze, MINIMUM_BRAIN
 
-    # brain = frozen(MINIMUM_BRAIN)
+    # brain = freeze(MINIMUM_BRAIN)
     # psp_waveform = generate_psp_waveform(brain.connections[0])
 
     # print(brain.connections)
