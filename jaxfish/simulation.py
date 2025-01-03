@@ -98,7 +98,6 @@ def initiate_simulation(
     firing_history = jnp.zeros((n_neurons, length), dtype=jnp.uint8)
 
     # generate psp waveforms,
-    # TODO: make this a jnp.array
     psp_waveforms = jnp.zeros(
         (n_connections, simulation.psp_waveform_length), dtype=jnp.float32
     )
