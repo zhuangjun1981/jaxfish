@@ -5,8 +5,6 @@ from jaxfish.data_classes import (
     FishForzen,
     BrainFrozen,
     SimulationFrozen,
-    MINIMUM_BRAIN,
-    freeze,
 )
 import jaxfish.utils as ut
 from functools import partial
@@ -196,6 +194,8 @@ def save_simulation():
 
 
 if __name__ == "__main__":
+    from jaxfish.data_classes import MINIMUM_BRAIN, freeze
+
     _ = initiate_simulation(
         terrain=Terrain(),
         brain=freeze(MINIMUM_BRAIN),

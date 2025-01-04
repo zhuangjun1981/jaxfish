@@ -232,14 +232,14 @@ MINIMUM_BRAIN = Brain(
 )
 
 
-def Freeze(var: Union[Fish, Neuron, Eye, Muscle, Connection, Brain]):
+def freeze(var: Union[Fish, Neuron, Eye, Muscle, Connection, Brain]):
     if var.type.endswith("_frozen"):
         return var
     elif var.type == "brain":
         return BrainFrozen(
-            neurons=tuple(frozen(n) for n in var.neurons),
+            neurons=tuple(freeze(n) for n in var.neurons),
             connection_directions=var.connection_directions,
-            connections=tuple(frozen(c) for c in var.connections),
+            connections=tuple(freeze(c) for c in var.connections),
         )
     else:
         frozen_class = var.type.split("_")[0]

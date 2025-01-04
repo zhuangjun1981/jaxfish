@@ -1,7 +1,7 @@
 import jax
 import numpy as np
 import jax.numpy as jnp
-from jaxfish.data_classes import Terrain, ConnectionFrozen
+from jaxfish.data_classes import Terrain, ConnectionFrozen, EyeFrozen
 from functools import partial
 
 
@@ -114,7 +114,7 @@ def get_starting_fish_position(terrain_map: np.ndarray, key: jax.Array):
 
     all_positions = all_positions[jax.random.permutation(key, all_positions.shape[0])]
 
-    jax.debug.print("{all_positions}", all_positions=all_positions)
+    # jax.debug.print("{all_positions}", all_positions=all_positions)
 
     init_val = 0
 
@@ -256,6 +256,43 @@ def generate_psp_waveform(
     return psp
 
 
+@partial(jax.jit, static_argnames="eye")
+def get_input_terrain_eye(
+    eye: EyeFrozen,
+    terrain_map: jnp.ndarray,
+    fish_position: jnp.ndarray,
+) -> float:
+    map_pixels = terrain_map[
+        jnp.array(eye.rf_positions[0]) + fish_position[0],
+        jnp.array(eye.rf_positions[1]) + fish_position[1],
+    ]
+
+    input = jnp.dot(jnp.array(eye.rf_weights), map_pixels)
+
+    return input
+
+
+@partial(jax.jit, static_argnames="eye")
+def get_input_food_eye(
+    eye: EyeFrozen,
+    food_positions: jnp.ndarray,
+    fish_position: jnp.ndarray,
+):
+    # Broadcast fish_position to match rf_positions shape
+    fish_pos_broadcasted = fish_position[:, jnp.newaxis]
+
+    # Calculate pixel positions for all receptive fields
+    pix_positions = (fish_pos_broadcasted + jnp.array(eye.rf_positions)).T
+
+    # Reshape the arrays for broadcasting
+    rf_pix_reshaped = pix_positions[:, jnp.newaxis, :]
+    food_pix_reshaped = food_positions[jnp.newaxis, :, :]
+
+    # matches, shape = (num_rf_pixels, )
+    matches = jnp.any(jnp.all(rf_pix_reshaped == food_pix_reshaped, axis=2), axis=1)
+    return jnp.dot(matches, jnp.array(eye.rf_weights))
+
+
 if __name__ == "__main__":
     # seed = 0
     # key = jax.random.key(seed)
@@ -292,16 +329,72 @@ if __name__ == "__main__":
     # psp_waveforms = jax.vmap(generate_psp_waveform, 0, 0)(brain.connections)
 
     # # =======================================================
-    amplitude = 4.0
-    latency = 3
-    rise_time = 2
-    decay_time = 4
-    psp_waveform_length = 10
-    psp_waveform = generate_psp_waveform(
-        latency=latency,
-        rise_time=rise_time,
-        decay_time=decay_time,
-        amplitude=amplitude,
-        psp_waveform_length=psp_waveform_length,
+    # amplitude = 4.0
+    # latency = 3
+    # rise_time = 2
+    # decay_time = 4
+    # psp_waveform_length = 10
+    # psp_waveform = generate_psp_waveform(
+    #     latency=latency,
+    #     rise_time=rise_time,
+    #     decay_time=decay_time,
+    #     amplitude=amplitude,
+    #     psp_waveform_length=psp_waveform_length,
+    # )
+    # print(psp_waveform)
+
+    # =======================================================
+    from jaxfish.data_classes import EIGHT_EYES, freeze
+
+    seed = 0
+    key = jax.random.key(seed)
+    fish_key, food_key = jax.random.split(key, 2)
+
+    terrain = Terrain(minimap_size=(6, 6))
+    minimap = generate_terrain_map(terrain)
+    food_positions = jnp.array([[1, 1], [1, 4], [3, 1]])
+    fish_position = get_starting_fish_position(minimap, key=key)
+
+    print(minimap)
+    print(f"{fish_position=}")
+    print(f"{food_positions=}")
+
+    eye_terr = EIGHT_EYES["south"]
+    eye_terr.input_type = "terrain"
+    eye_terr = freeze(eye_terr)
+    input_terr = get_input_terrain_eye(
+        eye=eye_terr,
+        terrain_map=minimap,
+        fish_position=fish_position,
     )
-    print(psp_waveform)
+    print(f"{input_terr=}")  # should be 0.45
+
+    eye_terr = EIGHT_EYES["north"]
+    eye_terr.input_type = "terrain"
+    eye_terr = freeze(eye_terr)
+    input_terr = get_input_terrain_eye(
+        eye=eye_terr,
+        terrain_map=minimap,
+        fish_position=fish_position,
+    )
+    print(f"{input_terr=}")  # should be 0.9
+
+    eye_food = EIGHT_EYES["west"]
+    eye_food.input_type = "food"
+    eye_food = freeze(eye_food)
+    input_food = get_input_food_eye(
+        eye=eye_food,
+        food_positions=food_positions,
+        fish_position=fish_position,
+    )
+    print(f"{input_food=}")  # should be 0.3
+
+    eye_food = EIGHT_EYES["northeast"]
+    eye_food.input_type = "food"
+    eye_food = freeze(eye_food)
+    input_food = get_input_food_eye(
+        eye=eye_food,
+        food_positions=food_positions,
+        fish_position=fish_position,
+    )
+    print(f"{input_food=}")  # should be 0.1
