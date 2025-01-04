@@ -1,7 +1,14 @@
 import jax
 import numpy as np
 import jax.numpy as jnp
-from jaxfish.data_classes import Terrain, ConnectionFrozen, EyeFrozen
+from typing import Union
+from jaxfish.data_classes import (
+    Terrain,
+    ConnectionFrozen,
+    EyeFrozen,
+    NeuronFrozen,
+    MuscleFrozen,
+)
 from functools import partial
 
 
@@ -256,25 +263,28 @@ def generate_psp_waveform(
     return psp
 
 
-@partial(jax.jit, static_argnames="eye")
+@jax.jit
 def get_input_terrain_eye(
-    eye: EyeFrozen,
+    rf_positions: jnp.ndarray,
+    rf_weights: jnp.ndarray,
+    gain: float,
     terrain_map: jnp.ndarray,
     fish_position: jnp.ndarray,
 ) -> float:
     map_pixels = terrain_map[
-        jnp.array(eye.rf_positions[0]) + fish_position[0],
-        jnp.array(eye.rf_positions[1]) + fish_position[1],
+        rf_positions[0] + fish_position[0],
+        rf_positions[1] + fish_position[1],
     ]
 
-    input = jnp.dot(jnp.array(eye.rf_weights), map_pixels)
+    input = jnp.dot(rf_weights, map_pixels) * gain
 
     return input
 
 
-@partial(jax.jit, static_argnames="eye")
 def get_input_food_eye(
-    eye: EyeFrozen,
+    rf_positions: jnp.ndarray,
+    rf_weights: jnp.ndarray,
+    gain: float,
     food_positions: jnp.ndarray,
     fish_position: jnp.ndarray,
 ):
@@ -282,7 +292,7 @@ def get_input_food_eye(
     fish_pos_broadcasted = fish_position[:, jnp.newaxis]
 
     # Calculate pixel positions for all receptive fields
-    pix_positions = (fish_pos_broadcasted + jnp.array(eye.rf_positions)).T
+    pix_positions = (fish_pos_broadcasted + rf_positions).T
 
     # Reshape the arrays for broadcasting
     rf_pix_reshaped = pix_positions[:, jnp.newaxis, :]
@@ -290,7 +300,37 @@ def get_input_food_eye(
 
     # matches, shape = (num_rf_pixels, )
     matches = jnp.any(jnp.all(rf_pix_reshaped == food_pix_reshaped, axis=2), axis=1)
-    return jnp.dot(matches, jnp.array(eye.rf_weights))
+    return jnp.dot(matches, rf_weights) * gain
+
+
+@partial(jax.jit, static_argnames=["neuron"])
+def get_input_neuron(
+    neuron,
+    terrain_map: jnp.ndarray,
+    food_positions: jnp.ndarray,
+    fish_position: jnp.ndarray,
+):
+    if neuron.type == "eye_frozen":
+        if neuron.input_type == "terrain":
+            input = get_input_terrain_eye(
+                rf_positions=jnp.array(neuron.rf_positions),
+                rf_weights=jnp.array(neuron.rf_weights),
+                gain=neuron.gain,
+                terrain_map=terrain_map,
+                fish_position=fish_position,
+            )
+        elif neuron.input_type == "food":
+            input = get_input_food_eye(
+                rf_positions=jnp.array(neuron.rf_positions),
+                rf_weights=jnp.array(neuron.rf_weights),
+                gain=neuron.gain,
+                food_positions=food_positions,
+                fish_position=fish_position,
+            )
+    else:
+        input = 0.0
+
+    return input
 
 
 if __name__ == "__main__":
@@ -359,42 +399,86 @@ if __name__ == "__main__":
     print(f"{fish_position=}")
     print(f"{food_positions=}")
 
-    eye_terr = EIGHT_EYES["south"]
-    eye_terr.input_type = "terrain"
-    eye_terr = freeze(eye_terr)
-    input_terr = get_input_terrain_eye(
-        eye=eye_terr,
-        terrain_map=minimap,
-        fish_position=fish_position,
-    )
-    print(f"{input_terr=}")  # should be 0.45
+    # eye_terr = EIGHT_EYES["south"]
+    # eye_terr.input_type = "terrain"
+    # eye_terr = freeze(eye_terr)
+    # input_terr = get_input_terrain_eye(
+    #     eye=eye_terr,
+    #     terrain_map=minimap,
+    #     fish_position=fish_position,
+    # )
+    # print(f"{input_terr=}")  # should be 0.45
 
-    eye_terr = EIGHT_EYES["north"]
-    eye_terr.input_type = "terrain"
-    eye_terr = freeze(eye_terr)
-    input_terr = get_input_terrain_eye(
-        eye=eye_terr,
-        terrain_map=minimap,
-        fish_position=fish_position,
-    )
-    print(f"{input_terr=}")  # should be 0.9
+    # eye_terr = EIGHT_EYES["north"]
+    # eye_terr.input_type = "terrain"
+    # eye_terr = freeze(eye_terr)
+    # input_terr = get_input_terrain_eye(
+    #     eye=eye_terr,
+    #     terrain_map=minimap,
+    #     fish_position=fish_position,
+    # )
+    # print(f"{input_terr=}")  # should be 0.9
 
-    eye_food = EIGHT_EYES["west"]
-    eye_food.input_type = "food"
-    eye_food = freeze(eye_food)
-    input_food = get_input_food_eye(
-        eye=eye_food,
+    # eye_food = EIGHT_EYES["west"]
+    # eye_food.input_type = "food"
+    # eye_food = freeze(eye_food)
+    # input_food = get_input_food_eye(
+    #     eye=eye_food,
+    #     food_positions=food_positions,
+    #     fish_position=fish_position,
+    # )
+    # print(f"{input_food=}")  # should be 0.3
+
+    # eye_food = EIGHT_EYES["northeast"]
+    # eye_food.input_type = "food"
+    # eye_food = freeze(eye_food)
+    # input_food = get_input_food_eye(
+    #     eye=eye_food,
+    #     food_positions=food_positions,
+    #     fish_position=fish_position,
+    # )
+    # print(f"{input_food=}")  # should be 0.1
+
+    eye_terr_0 = EIGHT_EYES["south"]
+    eye_terr_0.input_type = "terrain"
+    eye_terr_0 = freeze(eye_terr_0)
+    input = get_input_neuron(
+        neuron=eye_terr_0,
+        terrain_map=minimap,
         food_positions=food_positions,
         fish_position=fish_position,
     )
-    print(f"{input_food=}")  # should be 0.3
+    print(input)  # should be 0.45
 
-    eye_food = EIGHT_EYES["northeast"]
-    eye_food.input_type = "food"
-    eye_food = freeze(eye_food)
-    input_food = get_input_food_eye(
-        eye=eye_food,
+    eye_terr_1 = EIGHT_EYES["north"]
+    eye_terr_1.input_type = "terrain"
+    eye_terr_1 = freeze(eye_terr_1)
+    input = get_input_neuron(
+        neuron=eye_terr_1,
+        terrain_map=minimap,
         food_positions=food_positions,
         fish_position=fish_position,
     )
-    print(f"{input_food=}")  # should be 0.1
+    print(input)  # should be 0.9
+
+    eye_food_0 = EIGHT_EYES["west"]
+    eye_food_0.input_type = "food"
+    eye_food_0 = freeze(eye_food_0)
+    input = get_input_neuron(
+        neuron=eye_food_0,
+        terrain_map=minimap,
+        food_positions=food_positions,
+        fish_position=fish_position,
+    )
+    print(input)  # should be 0.3
+
+    eye_food_0 = EIGHT_EYES["northeast"]
+    eye_food_0.input_type = "food"
+    eye_food_0 = freeze(eye_food_0)
+    input = get_input_neuron(
+        neuron=eye_food_0,
+        terrain_map=minimap,
+        food_positions=food_positions,
+        fish_position=fish_position,
+    )
+    print(input)  # should be 0.1

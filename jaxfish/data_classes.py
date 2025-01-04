@@ -254,9 +254,9 @@ if __name__ == "__main__":
     print(EIGHT_EYES["north"])
 
     eye = EIGHT_EYES["north"]
-    eye_frozen = frozen(eye)
+    eye_frozen = freeze(eye)
     print(eye_frozen)
 
     brain = MINIMUM_BRAIN
-    brain_frozen = frozen(brain)
+    brain_frozen = freeze(brain)
     print(brain_frozen)

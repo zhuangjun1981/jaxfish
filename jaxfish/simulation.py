@@ -127,6 +127,7 @@ def initiate_simulation(
     )
 
 
+@partial(jax.jit, static_argnames=["fish", "brain", "simulation"])
 def step_simulation(
     t: int,
     fish: FishForzen,
