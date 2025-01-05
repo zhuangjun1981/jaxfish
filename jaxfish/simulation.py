@@ -338,7 +338,8 @@ def save_simulation():
 
 
 if __name__ == "__main__":
-    from jaxfish.data_classes import MINIMUM_BRAIN, freeze, SimulationFrozen
+    from jaxfish.data_classes import freeze, SimulationFrozen
+    from jaxfish.defaults import MINIMUM_BRAIN
 
     seed = 42
     simulation_key = jax.random.key(seed)

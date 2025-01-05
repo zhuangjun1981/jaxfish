@@ -4,11 +4,9 @@ import jax.numpy as jnp
 from typing import Union
 from jaxfish.data_classes import (
     Terrain,
-    ConnectionFrozen,
     EyeFrozen,
     NeuronFrozen,
     MuscleFrozen,
-    BrainFrozen,
 )
 from functools import partial
 
@@ -456,6 +454,8 @@ def update_psp_history(
 
 
 if __name__ == "__main__":
+    from jaxfish.data_classes import ConnectionFrozen, BrainFrozen
+
     # ===========================================================
     terrain_map = generate_terrain_map(Terrain())
     fish_position = jnp.array([1, 1])
