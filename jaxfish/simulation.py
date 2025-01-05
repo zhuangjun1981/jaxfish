@@ -128,19 +128,10 @@ def initiate_simulation(
 
 @partial(jax.jit, static_argnames=["fish", "brain", "simulation"])
 def step_simulation(
-    t: int,
+    simulation_params,
     fish: FishForzen,
     brain: BrainFrozen,
     simulation: SimulationFrozen,
-    firing_keys: jnp.ndarray,
-    food_keys: jnp.ndarray,
-    terrain_map: jnp.ndarray,
-    food_positions_history: jnp.ndarray,
-    fish_position_history: jnp.ndarray,
-    health_history: jnp.ndarray,
-    firing_history: jnp.ndarray,
-    psp_waveforms: tuple[jnp.ndarray],
-    psp_history: tuple[jnp.ndarray],
 ):
     """
     given the current terrain map, fish position, food positions,
@@ -150,12 +141,38 @@ def step_simulation(
       3. get input to the brain with terrain map and food position in next time point
       4. update neuron firing, psp history, and fish movement (jit compile this step?)
       5. move fish and set fish position in next time point
+
+    Args:
+      simulation_params:
+        t: int,
+        firing_keys: jnp.ndarray,
+        food_keys: jnp.ndarray,
+        terrain_map: jnp.ndarray,
+        food_positions_history: jnp.ndarray,
+        fish_position_history: jnp.ndarray,
+        health_history: jnp.ndarray,
+        firing_history: jnp.ndarray,
+        psp_waveforms: jnp.ndarray,
+        psp_history: jnp.ndarray,
+      fish: FishForzen,
+      brain: BrainFrozen,
+      simulation: SimulationFrozen,
     """
 
-    curr_health = health_history[t]
-    if curr_health < 0.0:
-        return
+    (
+        t,
+        firing_keys,
+        food_keys,
+        terrain_map,
+        food_positions_history,
+        fish_position_history,
+        health_history,
+        firing_history,
+        psp_waveforms,
+        psp_history,
+    ) = simulation_params
 
+    curr_health = health_history[t]
     curr_fish_position = fish_position_history[t]
     curr_food_positions = food_positions_history[t]
 
@@ -194,7 +211,7 @@ def step_simulation(
 
         # update move_attempt
         move_attempt = jax.lax.cond(
-            pred=is_firing & neuron.type == "muscle_frozen",
+            pred=is_firing & (neuron.type == "muscle_frozen"),
             true_fun=lambda x: x + jnp.array(neuron.step_motion),
             false_fun=lambda x: x,
             operand=move_attempt,
@@ -203,12 +220,24 @@ def step_simulation(
         # update psp histories
         for pre_idx, post_idx in brain.connection_directions:
             if pre_idx == neuron_idx:
-                psp_history = ut.update_psp_history(
-                    t=t,
-                    pre_neuron_idx=pre_idx,
-                    post_neuron_idx=post_idx,
-                    psp_waveforms=psp_waveforms,
-                    psp_history=psp_history,
+
+                def true_fn(operand):
+                    t, pre_idx, post_idx, psp_waveforms, psp_history = operand
+
+                    psp_history = ut.update_psp_history(
+                        t=t,
+                        pre_neuron_idx=pre_idx,
+                        post_neuron_idx=post_idx,
+                        psp_waveforms=psp_waveforms,
+                        psp_history=psp_history,
+                    )
+                    return t, pre_idx, post_idx, psp_waveforms, psp_history
+
+                _, _, _, _, psp_history = jax.lax.cond(
+                    pred=is_firing,
+                    true_fun=true_fn,
+                    false_fun=lambda x: x,
+                    operand=(t, pre_idx, post_idx, psp_waveforms, psp_history),
                 )
 
     # set fish_position at t + 1
@@ -232,20 +261,56 @@ def step_simulation(
     curr_health = curr_health - fish.health_decay_rate
     health_history = health_history.at[t + 1].set(curr_health)
 
-    return
+    return (
+        t + 1,
+        firing_keys,
+        food_keys,
+        terrain_map,
+        food_positions_history,
+        fish_position_history,
+        health_history,
+        firing_history,
+        psp_waveforms,
+        psp_history,
+    )
 
 
-def run_simulation():
-    pass
+@partial(jax.jit, static_argnames=["fish", "brain", "simulation"])
+def cond_fn_out(
+    simulation_params: tuple[jnp.ndarray],
+    fish: FishForzen,
+    brain: BrainFrozen,
+    simulation: SimulationFrozen,
+):
+    """
+    condition check for the simulation while loop
+    if t is less than simulation_max_lenght and if fish's health >=0
+    continue simulation
+    """
+    (
+        t,
+        _,
+        _,
+        _,
+        _,
+        _,
+        health_history,
+        _,
+        _,
+        _,
+    ) = simulation_params
+
+    # if t is not reachin the end of the simulation and fish is not dead
+    return (t < simulation.max_simulation_length - 1) & (health_history[t] >= 0.0)
 
 
-def save_simulation():
-    pass
-
-
-if __name__ == "__main__":
-    from jaxfish.data_classes import MINIMUM_BRAIN, freeze
-
+@partial(jax.jit, static_argnames=("terrain", "simulation", "fish", "brain"))
+def run_simulation(
+    terrain: Terrain,
+    simulation: SimulationFrozen,
+    fish: FishForzen,
+    brain: BrainFrozen,
+) -> tuple[jnp.ndarray]:
     (
         firing_keys,
         food_keys,
@@ -257,13 +322,77 @@ if __name__ == "__main__":
         psp_waveforms,
         psp_history,
     ) = initiate_simulation(
-        terrain=Terrain(),
-        brain=freeze(MINIMUM_BRAIN),
-        fish=FishForzen(),
-        simulation=SimulationFrozen(
-            simulation_ind=0,
-            max_simulation_length=100,
-        ),
+        terrain=terrain,
+        simulation=simulation,
+        fish=fish,
+        brain=brain,
     )
 
-    _ = run_simulation()
+    init_params = (
+        0,
+        firing_keys,
+        food_keys,
+        terrain_map,
+        food_positions_history,
+        fish_position_history,
+        health_history,
+        firing_history,
+        psp_waveforms,
+        psp_history,
+    )
+
+    def cond_fn_in(simulation_params):
+        return cond_fn_out(
+            simulation_params, fish=fish, brain=brain, simulation=simulation
+        )
+
+    def body_fn(simulation_params):
+        return step_simulation(
+            simulation_params, fish=fish, brain=brain, simulation=simulation
+        )
+
+    params = jax.lax.while_loop(cond_fn_in, body_fn, init_params)
+
+    return params
+
+
+def save_simulation():
+    pass
+
+
+if __name__ == "__main__":
+    from jaxfish.data_classes import MINIMUM_BRAIN, freeze, SimulationFrozen
+
+    terrain = Terrain()
+    fish = FishForzen()
+    brain = freeze(MINIMUM_BRAIN)
+    simulation = SimulationFrozen(
+        simulation_ind=0,
+        max_simulation_length=50,
+    )
+
+    simulation_result = run_simulation(
+        terrain=terrain,
+        simulation=simulation,
+        fish=fish,
+        brain=brain,
+    )
+
+    (
+        _,
+        _,
+        _,
+        terrain_map,
+        food_positions_history,
+        fish_position_history,
+        health_history,
+        firing_history,
+        _,
+        psp_history,
+    ) = simulation_result
+
+    print(f"\n{food_positions_history=}")
+    print(f"\n{fish_position_history=}")
+    print(f"\n{health_history=}")
+    print(f"\n{firing_history=}")
+    print(f"\n{psp_history=}")

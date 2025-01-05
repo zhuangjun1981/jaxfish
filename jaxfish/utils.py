@@ -424,7 +424,7 @@ def evaluate_neuron(
     is_firing, firing_history = jax.lax.cond(
         pred=condition,
         true_fun=true_fn,
-        fals_fun=lambda x: x,
+        false_fun=lambda x: x,
         operand=(False, firing_history),
     )
 
@@ -434,7 +434,6 @@ def evaluate_neuron(
 @jax.jit
 def update_psp_history(
     t: int,
-    is_firing: int,
     pre_neuron_idx: int,
     post_neuron_idx: int,
     psp_waveforms: jnp.ndarray,
@@ -448,7 +447,7 @@ def update_psp_history(
         0,
         end_idx - t,
         lambda i, val: val.at[post_neuron_idx, i + t].add(
-            psp_waveforms[pre_neuron_idx, i] * is_firing
+            psp_waveforms[pre_neuron_idx, i]
         ),
         psp_history,
     )

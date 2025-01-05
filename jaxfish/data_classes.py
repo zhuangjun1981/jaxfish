@@ -41,6 +41,7 @@ class Neuron:
     type: str = "neuron"
     refractory_period: float = 1.2
     baseline_rate: float = 0.0
+    step_motion: tuple = (0, 0)
 
 
 @dataclass(frozen=True)
@@ -48,6 +49,7 @@ class NeuronFrozen:
     type: str = "neuron_frozen"
     refractory_period: float = 1.2
     baseline_rate: float = 0.0
+    step_motion: tuple = (0, 0)
 
 
 @dataclass
@@ -70,6 +72,7 @@ class Eye:
     gain: float = 1.0
     refractory_period: float = 1.2
     baseline_rate: float = 0.0
+    step_motion: tuple = (0, 0)
 
 
 @dataclass(frozen=True)
@@ -92,6 +95,7 @@ class EyeFrozen:
     gain: float = 1.0
     refractory_period: float = 1.2
     baseline_rate: float = 0.0
+    step_motion: tuple = (0, 0)
 
 
 @dataclass
