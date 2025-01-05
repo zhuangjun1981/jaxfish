@@ -13,16 +13,13 @@ os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=8"
 
 
 def f(x):
-    # return jnp.dot(x, x)
-    if x >= 0:
-        return x
-    else:
-        return -x
+    return jnp.dot(x, x)
 
 
-# x = jnp.ones((8, 100))
-x = jnp.ones(100)
-parallel_f = jax.pmap(f)
+x = jnp.ones((8, 100))
+parallel_f = jax.pmap(
+    f,
+)
 
 # Execute on multiple devices
 result = parallel_f(x)

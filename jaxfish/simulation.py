@@ -1,8 +1,8 @@
 import jax
 import jax.numpy as jnp
 from jaxfish.data_classes import (
-    Terrain,
-    FishForzen,
+    TerrainFrozen,
+    FishFrozen,
     BrainFrozen,
     SimulationFrozen,
 )
@@ -12,10 +12,10 @@ from functools import partial
 
 @partial(jax.jit, static_argnames=("terrain", "simulation", "fish", "brain"))
 def initiate_simulation(
-    simulation_key: jax.Array,
-    terrain: Terrain,
+    seed: int,
+    terrain: TerrainFrozen,
     simulation: SimulationFrozen,
-    fish: FishForzen,
+    fish: FishFrozen,
     brain: BrainFrozen,
 ) -> tuple[jnp.ndarray]:
     """
@@ -32,7 +32,7 @@ def initiate_simulation(
       4. initiate fish and food positions
 
     Args:
-      simulation_key: main random number generator for simulation
+      seed: int, seed for random number generator of the whole simulation
       terrain: Terrain dataclass
       simulation: SimulationFrozen dataclass
       fish: FishFrozen dataclass
@@ -49,6 +49,8 @@ def initiate_simulation(
         psp_waveforms: tuple[jnp.ndarray], len=n_connections, each element is 1d, with dtyp float32
         psp_history: jnp.ndarray, shape=(n_neurons, length), dtype=float32
     """
+
+    simulation_key = jax.random.key(seed)
 
     length = simulation.max_simulation_length
     food_num = simulation.food_num
@@ -130,7 +132,7 @@ def initiate_simulation(
 @partial(jax.jit, static_argnames=["fish", "brain", "simulation"])
 def step_simulation(
     simulation_params,
-    fish: FishForzen,
+    fish: FishFrozen,
     brain: BrainFrozen,
     simulation: SimulationFrozen,
 ):
@@ -155,7 +157,7 @@ def step_simulation(
         firing_history: jnp.ndarray,
         psp_waveforms: jnp.ndarray,
         psp_history: jnp.ndarray,
-      fish: FishForzen,
+      fish: FishFrozen,
       brain: BrainFrozen,
       simulation: SimulationFrozen,
     """
@@ -278,10 +280,10 @@ def step_simulation(
 
 @partial(jax.jit, static_argnames=("terrain", "simulation", "fish", "brain"))
 def run_simulation(
-    simulation_key: jax.Array,
-    terrain: Terrain,
+    seed: int,
+    terrain: TerrainFrozen,
     simulation: SimulationFrozen,
-    fish: FishForzen,
+    fish: FishFrozen,
     brain: BrainFrozen,
 ) -> tuple[jnp.ndarray]:
     (
@@ -295,7 +297,7 @@ def run_simulation(
         psp_waveforms,
         psp_history,
     ) = initiate_simulation(
-        simulation_key=simulation_key,
+        seed=seed,
         terrain=terrain,
         simulation=simulation,
         fish=fish,
@@ -338,22 +340,22 @@ def save_simulation():
 
 
 if __name__ == "__main__":
-    from jaxfish.data_classes import freeze, SimulationFrozen
+    from jaxfish.data_classes import freeze, Simulation
     from jaxfish.defaults import MINIMUM_BRAIN
 
     seed = 42
-    simulation_key = jax.random.key(seed)
 
-    terrain = Terrain()
-    fish = FishForzen()
+    terrain = TerrainFrozen()
+    fish = FishFrozen()
     brain = freeze(MINIMUM_BRAIN)
-    simulation = SimulationFrozen(
+    simulation = Simulation(
         simulation_ind=0,
         max_simulation_length=50,
     )
+    simulation = freeze(simulation)
 
     simulation_result = run_simulation(
-        simulation_key=simulation_key,
+        seed=seed,
         terrain=terrain,
         simulation=simulation,
         fish=fish,

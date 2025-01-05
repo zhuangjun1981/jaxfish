@@ -3,11 +3,20 @@ from dataclasses import dataclass
 from typing import Union
 
 
-@dataclass(frozen=True)
+@dataclass
 class Terrain:
     should_use_minimap: bool = True
     minimap_size: tuple = (9, 9)
     minimap_margin: int = 1
+    type: str = "terrain"
+
+
+@dataclass(frozen=True)
+class TerrainFrozen:
+    should_use_minimap: bool = True
+    minimap_size: tuple = (9, 9)
+    minimap_margin: int = 1
+    type: str = "terrain_frozen"
 
 
 @dataclass
@@ -24,7 +33,7 @@ class Fish:
 
 
 @dataclass(frozen=True)
-class FishForzen:
+class FishFrozen:
     name: str = "unknown"
     mother_name: str = "unknown"
     max_health: float = 50.0
@@ -152,15 +161,27 @@ class BrainFrozen:
     type: str = "brain_frozen"
 
 
+@dataclass
+class Simulation:
+    simulation_ind: int
+    max_simulation_length: int = 20000
+    food_num: int = 1
+    psp_waveform_length: int = 100  # maximum length to save unit psp waveforms
+    type: str = "simulation"
+
+
 @dataclass(frozen=True)
 class SimulationFrozen:
     simulation_ind: int
     max_simulation_length: int = 20000
     food_num: int = 1
     psp_waveform_length: int = 100  # maximum length to save unit psp waveforms
+    type: str = "simulation_frozen"
 
 
-def freeze(var: Union[Fish, Neuron, Eye, Muscle, Connection, Brain]):
+def freeze(
+    var: Union[Terrain, Fish, Neuron, Eye, Muscle, Connection, Brain, Simulation]
+):
     if var.type.endswith("_frozen"):
         return var
     elif var.type == "brain":
