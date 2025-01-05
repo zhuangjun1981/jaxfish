@@ -222,13 +222,13 @@ def step_simulation(
     # evaluate land penalty
 
     # evaluate movement penalty
-    curr_health = curr_health - jnp.sum(move_attempt) * fish.move_penalty_rate
+    curr_health = curr_health - jnp.sum(jnp.abs(move_attempt)) * fish.move_penalty_rate
 
     # set health at t + 1
     curr_health = curr_health - fish.health_decay_rate
     health_history = health_history.at[t + 1].set(curr_health)
 
-    return ()
+    return
 
 
 def run_simulation():
