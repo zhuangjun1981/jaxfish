@@ -157,7 +157,6 @@ class SimulationFrozen:
     simulation_ind: int
     max_simulation_length: int = 20000
     food_num: int = 1
-    main_seed: int = 42
     psp_waveform_length: int = 100  # maximum length to save unit psp waveforms
 
 

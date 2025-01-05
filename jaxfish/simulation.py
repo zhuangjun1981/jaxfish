@@ -12,6 +12,7 @@ from functools import partial
 
 @partial(jax.jit, static_argnames=("terrain", "simulation", "fish", "brain"))
 def initiate_simulation(
+    simulation_key: jax.Array,
     terrain: Terrain,
     simulation: SimulationFrozen,
     fish: FishForzen,
@@ -31,6 +32,7 @@ def initiate_simulation(
       4. initiate fish and food positions
 
     Args:
+      simulation_key: main random number generator for simulation
       terrain: Terrain dataclass
       simulation: SimulationFrozen dataclass
       fish: FishFrozen dataclass
@@ -54,8 +56,7 @@ def initiate_simulation(
     n_connections = len(brain.connections)
 
     # generate rngs
-    main_key = jax.random.key(simulation.main_seed)
-    food_key, fish_key, firing_key = jax.random.split(main_key, 3)
+    food_key, fish_key, firing_key = jax.random.split(simulation_key, 3)
 
     food_keys = jax.random.split(food_key, length)
     firing_keys = jax.random.split(firing_key, (n_neurons, length))
@@ -275,37 +276,9 @@ def step_simulation(
     )
 
 
-@partial(jax.jit, static_argnames=["fish", "brain", "simulation"])
-def cond_fn_out(
-    simulation_params: tuple[jnp.ndarray],
-    fish: FishForzen,
-    brain: BrainFrozen,
-    simulation: SimulationFrozen,
-):
-    """
-    condition check for the simulation while loop
-    if t is less than simulation_max_lenght and if fish's health >=0
-    continue simulation
-    """
-    (
-        t,
-        _,
-        _,
-        _,
-        _,
-        _,
-        health_history,
-        _,
-        _,
-        _,
-    ) = simulation_params
-
-    # if t is not reachin the end of the simulation and fish is not dead
-    return (t < simulation.max_simulation_length - 1) & (health_history[t] >= 0.0)
-
-
 @partial(jax.jit, static_argnames=("terrain", "simulation", "fish", "brain"))
 def run_simulation(
+    simulation_key: jax.Array,
     terrain: Terrain,
     simulation: SimulationFrozen,
     fish: FishForzen,
@@ -322,6 +295,7 @@ def run_simulation(
         psp_waveforms,
         psp_history,
     ) = initiate_simulation(
+        simulation_key=simulation_key,
         terrain=terrain,
         simulation=simulation,
         fish=fish,
@@ -342,9 +316,12 @@ def run_simulation(
     )
 
     def cond_fn_in(simulation_params):
-        return cond_fn_out(
-            simulation_params, fish=fish, brain=brain, simulation=simulation
-        )
+        t = simulation_params[0]
+        health_history = simulation_params[6]
+
+        cond = (t < simulation.max_simulation_length - 1) & (health_history[t] >= 0.0)
+        # jax.debug.print("{cond}", cond=cond)
+        return cond
 
     def body_fn(simulation_params):
         return step_simulation(
@@ -363,6 +340,9 @@ def save_simulation():
 if __name__ == "__main__":
     from jaxfish.data_classes import MINIMUM_BRAIN, freeze, SimulationFrozen
 
+    seed = 42
+    simulation_key = jax.random.key(seed)
+
     terrain = Terrain()
     fish = FishForzen()
     brain = freeze(MINIMUM_BRAIN)
@@ -372,6 +352,7 @@ if __name__ == "__main__":
     )
 
     simulation_result = run_simulation(
+        simulation_key=simulation_key,
         terrain=terrain,
         simulation=simulation,
         fish=fish,
