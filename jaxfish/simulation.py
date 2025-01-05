@@ -175,7 +175,7 @@ def step_simulation(
     # updata health
     curr_health = curr_health + eaten_food_num * fish.food_rate
 
-    # update firing of all neurons, get movement
+    # update firing of all neurons, get movement attempt
     move_attempt = jnp.zeros(2, dtype=jnp.int32)
 
     for neuron_idx, neuron in enumerate(brain.neurons):
@@ -195,7 +195,7 @@ def step_simulation(
         # update move_attempt
         move_attempt = jax.lax.cond(
             pred=is_firing & neuron.type == "muscle_frozen",
-            true_fun=lambda move_attempt: move_attempt + jnp.array(neuron.step_motion),
+            true_fun=lambda x: x + jnp.array(neuron.step_motion),
             false_fun=lambda x: x,
             operand=move_attempt,
         )

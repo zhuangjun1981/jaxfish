@@ -396,8 +396,8 @@ def evaluate_neuron(
     input = get_input_neuron(
         neuron=neuron,
         terrain_map=terrain_map,
-        food_positions=food_positions_history[t],
-        fish_position=fish_position_history[t],
+        food_positions=food_positions_history[t + 1],
+        fish_position=fish_position_history[t + 1],
     )
 
     base_val = input + neuron.baseline_rate + psp_history[neuron_idx][t]
