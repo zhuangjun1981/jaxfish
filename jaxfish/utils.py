@@ -8,6 +8,7 @@ from jaxfish.data_classes import (
     EyeFrozen,
     NeuronFrozen,
     MuscleFrozen,
+    BrainFrozen,
 )
 from functools import partial
 
@@ -38,6 +39,37 @@ def get_fish_pixels(fish_position: jnp.ndarray) -> jnp.ndarray:
     )
     fish_pixels = fish_position[jnp.newaxis, :] + indices
     return fish_pixels
+
+
+@jax.jit
+def update_fish_position(
+    curr_fish_position: jnp.ndarray,
+    move_attempt: jnp.ndarray,
+    terrain_map: jnp.ndarray,
+) -> jnp.ndarray:
+    """
+    given current fish position and move attempt and the terrain map,
+    return updated fish position, mostly making sure it will not move
+    out of boundary
+    """
+    n_rows, n_cols = terrain_map.shape
+    updated_fish_position = curr_fish_position + move_attempt
+
+    updated_fish_position = jnp.vstack((updated_fish_position, jnp.array([1, 1])))
+    updated_fish_position = jnp.max(updated_fish_position, axis=0)
+    updated_fish_position = jnp.vstack(
+        (updated_fish_position, jnp.array([n_rows - 2, n_cols - 2]))
+    )
+    updated_fish_position = jnp.min(updated_fish_position, axis=0)
+
+    return updated_fish_position
+
+
+# def get_land_overlap(
+#     terrain_map,
+#     fish_position,
+# ):
+#     fish_pixels = get_fish_pixels(fish_position)
 
 
 @jax.jit
@@ -305,7 +337,7 @@ def get_input_food_eye(
 
 @partial(jax.jit, static_argnames=["neuron"])
 def get_input_neuron(
-    neuron,
+    neuron: Union[EyeFrozen, NeuronFrozen, MuscleFrozen],
     terrain_map: jnp.ndarray,
     food_positions: jnp.ndarray,
     fish_position: jnp.ndarray,
@@ -333,7 +365,103 @@ def get_input_neuron(
     return input
 
 
+@jax.jit
+def find_last_firing_time(firing_history: jnp.ndarray) -> int:
+    """
+    return the index of last firing in the 1d firing history array
+
+    Args:
+      firing_history: jnp.ndarray, 1d, binary, firing or not in each time point
+
+    Returns:
+      firing_time: int, the index of last firing time, if no firing, return -1
+    """
+    indices = jnp.arange(firing_history.shape[0])
+    masked_indices = jnp.where(firing_history == 1, indices, -1)
+    return jnp.max(masked_indices).astype(jnp.int32)
+
+
+@partial(jax.jit, static_argnames="neuron")
+def evaluate_neuron(
+    neuron_idx: int,
+    t: int,
+    neuron: Union[EyeFrozen, NeuronFrozen, MuscleFrozen],
+    terrain_map: jnp.ndarray,
+    food_positions_history: jnp.ndarray,
+    fish_position_history: jnp.ndarray,
+    firing_history: jnp.ndarray,
+    psp_history: jnp.ndarray,
+    firing_keys: jax.Array,
+):
+    input = get_input_neuron(
+        neuron=neuron,
+        terrain_map=terrain_map,
+        food_positions=food_positions_history[t],
+        fish_position=fish_position_history[t],
+    )
+
+    base_val = input + neuron.baseline_rate + psp_history[neuron_idx][t]
+    last_firing_time = find_last_firing_time(firing_history[neuron_idx])
+
+    def true_fn(operand):
+        is_firing, firing_history = operand
+        firing_history = firing_history.at[neuron_idx, t].set(1)
+        return True, firing_history
+
+    condition = (last_firing_time + neuron.refractory_period < t) & (
+        jax.random.uniform(firing_keys[neuron_idx, t]) < base_val
+    )
+    is_firing, firing_history = jax.lax.cond(
+        pred=condition,
+        true_fun=true_fn,
+        fals_fun=lambda x: x,
+        operand=(False, firing_history),
+    )
+
+    return is_firing, firing_history
+
+
+@jax.jit
+def update_psp_history(
+    t: int,
+    is_firing: int,
+    pre_neuron_idx: int,
+    post_neuron_idx: int,
+    psp_waveforms: jnp.ndarray,
+    psp_history: jnp.ndarray,
+) -> jnp.ndarray:
+    psp_length = psp_waveforms.shape[1]
+    length = psp_history.shape[1]
+    end_idx = jnp.minimum(t + psp_length, length)
+
+    psp_history = jax.lax.fori_loop(
+        0,
+        end_idx - t,
+        lambda i, val: val.at[post_neuron_idx, i + t].add(
+            psp_waveforms[pre_neuron_idx, i] * is_firing
+        ),
+        psp_history,
+    )
+
+    return psp_history
+
+
 if __name__ == "__main__":
+    psp_history = jnp.zeros((4, 20))
+    psp_waveforms = jnp.arange(6, dtype=jnp.float32).reshape((2, 3))
+
+    psp_history = update_psp_history(
+        t=2,
+        is_firing=True,
+        pre_neuron_idx=1,
+        post_neuron_idx=3,
+        psp_waveforms=psp_waveforms,
+        psp_history=psp_history,
+    )
+
+    print(psp_history)
+
+    # # ===========================================================
     # seed = 0
     # key = jax.random.key(seed)
     # fish_key, food_key = jax.random.split(key, 2)
@@ -384,20 +512,20 @@ if __name__ == "__main__":
     # print(psp_waveform)
 
     # =======================================================
-    from jaxfish.data_classes import EIGHT_EYES, freeze
+    # from jaxfish.data_classes import EIGHT_EYES, freeze
 
-    seed = 0
-    key = jax.random.key(seed)
-    fish_key, food_key = jax.random.split(key, 2)
+    # seed = 0
+    # key = jax.random.key(seed)
+    # fish_key, food_key = jax.random.split(key, 2)
 
-    terrain = Terrain(minimap_size=(6, 6))
-    minimap = generate_terrain_map(terrain)
-    food_positions = jnp.array([[1, 1], [1, 4], [3, 1]])
-    fish_position = get_starting_fish_position(minimap, key=key)
+    # terrain = Terrain(minimap_size=(6, 6))
+    # minimap = generate_terrain_map(terrain)
+    # food_positions = jnp.array([[1, 1], [1, 4], [3, 1]])
+    # fish_position = get_starting_fish_position(minimap, key=key)
 
-    print(minimap)
-    print(f"{fish_position=}")
-    print(f"{food_positions=}")
+    # print(minimap)
+    # print(f"{fish_position=}")
+    # print(f"{food_positions=}")
 
     # eye_terr = EIGHT_EYES["south"]
     # eye_terr.input_type = "terrain"
@@ -439,46 +567,102 @@ if __name__ == "__main__":
     # )
     # print(f"{input_food=}")  # should be 0.1
 
-    eye_terr_0 = EIGHT_EYES["south"]
-    eye_terr_0.input_type = "terrain"
-    eye_terr_0 = freeze(eye_terr_0)
-    input = get_input_neuron(
-        neuron=eye_terr_0,
-        terrain_map=minimap,
-        food_positions=food_positions,
-        fish_position=fish_position,
-    )
-    print(input)  # should be 0.45
+    # eye_terr_0 = EIGHT_EYES["south"]
+    # eye_terr_0.input_type = "terrain"
+    # eye_terr_0 = freeze(eye_terr_0)
+    # input = get_input_neuron(
+    #     neuron=eye_terr_0,
+    #     terrain_map=minimap,
+    #     food_positions=food_positions,
+    #     fish_position=fish_position,
+    # )
+    # print(input)  # should be 0.45
 
-    eye_terr_1 = EIGHT_EYES["north"]
-    eye_terr_1.input_type = "terrain"
-    eye_terr_1 = freeze(eye_terr_1)
-    input = get_input_neuron(
-        neuron=eye_terr_1,
-        terrain_map=minimap,
-        food_positions=food_positions,
-        fish_position=fish_position,
-    )
-    print(input)  # should be 0.9
+    # eye_terr_1 = EIGHT_EYES["north"]
+    # eye_terr_1.input_type = "terrain"
+    # eye_terr_1 = freeze(eye_terr_1)
+    # input = get_input_neuron(
+    #     neuron=eye_terr_1,
+    #     terrain_map=minimap,
+    #     food_positions=food_positions,
+    #     fish_position=fish_position,
+    # )
+    # print(input)  # should be 0.9
 
-    eye_food_0 = EIGHT_EYES["west"]
-    eye_food_0.input_type = "food"
-    eye_food_0 = freeze(eye_food_0)
-    input = get_input_neuron(
-        neuron=eye_food_0,
-        terrain_map=minimap,
-        food_positions=food_positions,
-        fish_position=fish_position,
-    )
-    print(input)  # should be 0.3
+    # eye_food_0 = EIGHT_EYES["west"]
+    # eye_food_0.input_type = "food"
+    # eye_food_0 = freeze(eye_food_0)
+    # input = get_input_neuron(
+    #     neuron=eye_food_0,
+    #     terrain_map=minimap,
+    #     food_positions=food_positions,
+    #     fish_position=fish_position,
+    # )
+    # print(input)  # should be 0.3
 
-    eye_food_0 = EIGHT_EYES["northeast"]
-    eye_food_0.input_type = "food"
-    eye_food_0 = freeze(eye_food_0)
-    input = get_input_neuron(
-        neuron=eye_food_0,
-        terrain_map=minimap,
-        food_positions=food_positions,
-        fish_position=fish_position,
-    )
-    print(input)  # should be 0.1
+    # eye_food_0 = EIGHT_EYES["northeast"]
+    # eye_food_0.input_type = "food"
+    # eye_food_0 = freeze(eye_food_0)
+    # input = get_input_neuron(
+    #     neuron=eye_food_0,
+    #     terrain_map=minimap,
+    #     food_positions=food_positions,
+    #     fish_position=fish_position,
+    # )
+    # print(input)  # should be 0.1
+
+    # # =======================================================
+    # terrain_map = jnp.zeros((6, 6))
+    # print(update_fish_position(
+    #     curr_fish_position = jnp.array([1, 1]),
+    #     move_attempt=jnp.array([-1, 1]),
+    #     terrain_map=terrain_map,
+    # ))
+    # # =======================================================
+
+    # # =======================================================
+    # from jaxfish.data_classes import EIGHT_EYES, freeze, MINIMUM_BRAIN
+
+    # seed = 0
+    # length = 50
+    # key = jax.random.key(seed)
+    # food_key, fish_key, firing_key = jax.random.split(key, 3)
+    # brain = freeze(MINIMUM_BRAIN)
+    # n_neurons = len(brain.neurons)
+    # firing_keys = jax.random.split(firing_key, (n_neurons, length))
+
+    # terrain = Terrain(minimap_size=(6, 6))
+    # minimap = generate_terrain_map(terrain)
+
+    # food_positions_history = jnp.zeros((2, length, 2), dtype=jnp.int32)
+    # food_position_history = food_positions_history.at[:, 0, :].set(jnp.array([[1, 1], [1, 4]]))
+
+    # fish_position_history = jnp.zeros((length, 2), dtype=jnp.int32)
+    # fish_position_history = fish_position_history.at[0].set(jnp.array([2, 3]))
+
+    # firing_history = jnp.zeros((n_neurons, length), dtype=jnp.uint8)
+    # psp_history = jnp.zeros((n_neurons, length), dtype=jnp.float32)
+
+    # move_attempt = jnp.zeros(2, dtype=jnp.int32)
+
+    # for neuron_idx, neuron in enumerate(brain.neurons):
+
+    #     # evaluate neuron firing and move attempt
+    #     is_firing, firing_history = evaluate_neuron(
+    #         neuron_idx=neuron_idx,
+    #         t=0,
+    #         neuron=neuron,
+    #         terrain_map=minimap,
+    #         food_positions_history=food_positions_history,
+    #         fish_position_history=fish_position_history,
+    #         firing_history=firing_history,
+    #         psp_history=psp_history,
+    #         firing_keys=firing_keys
+    #     )
+
+    #     if is_firing and neuron.type == "muscle_frozen":
+    #         move_attempt = move_attempt + jnp.array(neuron.step_motion)
+
+    #     print(neuron)
+    #     print(is_firing)
+    #     print(move_attempt)

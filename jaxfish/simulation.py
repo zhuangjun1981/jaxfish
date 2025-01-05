@@ -111,8 +111,7 @@ def initiate_simulation(
         )
 
     # initiate neuron post-synaptic potential waveforms, this part is jit compatable, if brain ahd simulation is set to be static
-    baselines = jnp.expand_dims(jnp.array([n.baseline_rate for n in brain.neurons]), 1)
-    psp_history = jnp.ones((len(brain.neurons), length), dtype=float) * baselines
+    psp_history = jnp.zeros((n_neurons, length), dtype=jnp.float32)
 
     return (
         firing_keys,
@@ -176,17 +175,63 @@ def step_simulation(
     # updata health
     curr_health = curr_health + eaten_food_num * fish.food_rate
 
-    # get input to the eye
-
     # update firing of all neurons, get movement
+    move_attempt = jnp.zeros(2, dtype=jnp.int32)
 
-    # update psp histories
+    for neuron_idx, neuron in enumerate(brain.neurons):
+        # evaluate neuron firing and move attempt
+        is_firing, firing_history = ut.evaluate_neuron(
+            neuron_idx=neuron_idx,
+            t=t,
+            neuron=neuron,
+            terrain_map=terrain_map,
+            food_positions_history=food_positions_history,
+            fish_position_history=fish_position_history,
+            firing_history=firing_history,
+            psp_history=psp_history,
+            firing_keys=firing_keys,
+        )
+
+        # update move_attempt
+        move_attempt = jax.lax.cond(
+            pred=is_firing & neuron.type == "muscle_frozen",
+            true_fun=lambda move_attempt: move_attempt + jnp.array(neuron.step_motion),
+            false_fun=lambda x: x,
+            operand=move_attempt,
+        )
+
+        # update psp histories
+        for pre_idx, post_idx in brain.connection_directions:
+            if pre_idx == neuron_idx:
+                psp_history = ut.update_psp_history(
+                    t=t,
+                    pre_neuron_idx=pre_idx,
+                    post_neuron_idx=post_idx,
+                    psp_waveforms=psp_waveforms,
+                    psp_history=psp_history,
+                )
 
     # set fish_position at t + 1
+    updated_fish_position = ut.update_fish_position(
+        curr_fish_position=curr_fish_position,
+        move_attempt=move_attempt,
+        terrain_map=terrain_map,
+    )
+    fish_position_history = fish_position_history.at[t + 1].set(updated_fish_position)
+
+    # evaluate land penalty
+
+    # evaluate movement penalty
+    curr_health = curr_health - jnp.sum(move_attempt) * fish.move_penalty_rate
 
     # set health at t + 1
     curr_health = curr_health - fish.health_decay_rate
     health_history = health_history.at[t + 1].set(curr_health)
+
+    return ()
+
+
+def run_simulation():
     pass
 
 
@@ -196,16 +241,6 @@ def save_simulation():
 
 if __name__ == "__main__":
     from jaxfish.data_classes import MINIMUM_BRAIN, freeze
-
-    _ = initiate_simulation(
-        terrain=Terrain(),
-        brain=freeze(MINIMUM_BRAIN),
-        fish=FishForzen(),
-        simulation=SimulationFrozen(
-            simulation_ind=0,
-            max_simulation_length=100,
-        ),
-    )
 
     (
         firing_keys,
@@ -217,11 +252,14 @@ if __name__ == "__main__":
         firing_history,
         psp_waveforms,
         psp_history,
-    ) = _
+    ) = initiate_simulation(
+        terrain=Terrain(),
+        brain=freeze(MINIMUM_BRAIN),
+        fish=FishForzen(),
+        simulation=SimulationFrozen(
+            simulation_ind=0,
+            max_simulation_length=100,
+        ),
+    )
 
-    # print(firing_keys)
-    # print(firing_keys[0].dtype)
-    # print(terrain_map)
-    # print(psp_history)
-    # print(fish_position_history)
-    print(psp_waveforms)
+    _ = run_simulation()
