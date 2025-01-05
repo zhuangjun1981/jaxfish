@@ -220,6 +220,10 @@ def step_simulation(
     fish_position_history = fish_position_history.at[t + 1].set(updated_fish_position)
 
     # evaluate land penalty
+    land_overlap = ut.get_land_overlap(
+        terrain_map=terrain_map, fish_position=curr_fish_position
+    )
+    curr_health = curr_health - land_overlap * fish.land_penalty_rate
 
     # evaluate movement penalty
     curr_health = curr_health - jnp.sum(jnp.abs(move_attempt)) * fish.move_penalty_rate

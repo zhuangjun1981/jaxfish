@@ -65,11 +65,21 @@ def update_fish_position(
     return updated_fish_position
 
 
-# def get_land_overlap(
-#     terrain_map,
-#     fish_position,
-# ):
-#     fish_pixels = get_fish_pixels(fish_position)
+@jax.jit
+def get_land_overlap(
+    terrain_map,
+    fish_position,
+):
+    """
+    return number of pixels that fish's body overlaping with land
+    """
+    patch_size = 3
+    fish_patch = jax.lax.dynamic_slice(
+        terrain_map,
+        (fish_position[0] - 1, fish_position[1] - 1),
+        (patch_size, patch_size),
+    )
+    return jnp.sum(fish_patch)
 
 
 @jax.jit
@@ -447,19 +457,25 @@ def update_psp_history(
 
 
 if __name__ == "__main__":
-    psp_history = jnp.zeros((4, 20))
-    psp_waveforms = jnp.arange(6, dtype=jnp.float32).reshape((2, 3))
+    # ===========================================================
+    terrain_map = generate_terrain_map(Terrain())
+    fish_position = jnp.array([1, 1])
+    print(get_land_overlap(terrain_map, fish_position))
 
-    psp_history = update_psp_history(
-        t=2,
-        is_firing=True,
-        pre_neuron_idx=1,
-        post_neuron_idx=3,
-        psp_waveforms=psp_waveforms,
-        psp_history=psp_history,
-    )
+    # # ===========================================================
+    # psp_history = jnp.zeros((4, 20))
+    # psp_waveforms = jnp.arange(6, dtype=jnp.float32).reshape((2, 3))
 
-    print(psp_history)
+    # psp_history = update_psp_history(
+    #     t=2,
+    #     is_firing=True,
+    #     pre_neuron_idx=1,
+    #     post_neuron_idx=3,
+    #     psp_waveforms=psp_waveforms,
+    #     psp_history=psp_history,
+    # )
+
+    # print(psp_history)
 
     # # ===========================================================
     # seed = 0
